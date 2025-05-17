@@ -6,20 +6,13 @@ import os
 
 openai.api_key = os.environ.get("OPENAI_API_KEY", "YOUR_OPENAI_API_KEY")
 
-st.title("🎤 録音して文字起こし＆要約（自動送信版）")
+st.title("🎤 録音して文字起こし＆要約（修正版）")
 
-st.write("""
-録音開始・停止ボタンを押すと録音し、録音終了後に自動的に文字起こし＆要約します。
-""")
+st.write("録音開始・停止ボタンを押すと録音し、録音終了後に自動的に文字起こし＆要約します。")
 
-# Streamlitのiframeとの双方向通信を利用して
-# JS側からbase64文字列をPython側にpostMessageで送る仕組みを作る
-recording_html = """
+# JSコード（録音、base64変換、終了時にbase64文字列を返す）
+recording_js = """
 <script>
-const sendAudioToStreamlit = (base64String) => {
-    window.parent.postMessage({audioData: base64String}, "*");
-};
-
 let mediaRecorder;
 let audioChunks = [];
 let timerInterval;
@@ -49,7 +42,11 @@ function startRecording() {
             reader.readAsDataURL(audioBlob);
             reader.onloadend = () => {
                 const base64data = reader.result;
-                sendAudioToStreamlit(base64data);
+                // base64文字列をStreamlit側に返す
+                const streamlitAPI = window.parent.streamlitAPI || window.parent.parent.streamlitAPI;
+                if(streamlitAPI && streamlitAPI.setComponentValue) {
+                    streamlitAPI.setComponentValue(base64data);
+                }
             };
 
             const audioUrl = URL.createObjectURL(audioBlob);
@@ -65,17 +62,6 @@ function stopRecording() {
         mediaRecorder.stop();
     }
 }
-
-// Streamlit側でpostMessageを受け取るための設定
-window.addEventListener("message", (event) => {
-    if (event.data && event.data.audioData) {
-        const textarea = window.parent.document.getElementById("audio_data_textarea");
-        if (textarea) {
-            textarea.value = event.data.audioData;
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-    }
-});
 </script>
 
 <div style="margin-top: 10px;">
@@ -86,10 +72,8 @@ window.addEventListener("message", (event) => {
 <audio id="audio_play" controls style="display:none; margin-top: 10px;"></audio>
 """
 
-# 非表示textareaで受け取るための空textareaを用意（idはJSと一致させる）
-audio_base64 = st.text_area("audio_data_textarea", value="", height=100, label_visibility="hidden", key="audio_data_textarea")
-
-st.components.v1.html(recording_html, height=300)
+# components.v1.html の戻り値でJSからbase64を受け取る
+audio_base64 = st.components.v1.html(recording_js, height=300, scrolling=False)
 
 if audio_base64:
     st.audio(audio_base64, format="audio/wav")
