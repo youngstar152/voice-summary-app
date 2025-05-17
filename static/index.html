@@ -32,8 +32,20 @@ const resultDiv = document.getElementById("result");
 startBtn.onclick = async () => {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
+
+        let mimeType = "";
+        if (MediaRecorder.isTypeSupported("audio/webm")) {
+            mimeType = "audio/webm";
+        } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+            mimeType = "audio/mp4";
+        } else {
+            alert("このブラウザでは録音がサポートされていません。別のブラウザ（例: Chrome）をお試しください。");
+            return;
+        }
+
+        mediaRecorder = new MediaRecorder(stream, { mimeType });
         chunks = [];
+
         mediaRecorder.ondataavailable = e => {
             if (e.data.size > 0) chunks.push(e.data);
         };
@@ -56,14 +68,15 @@ startBtn.onclick = async () => {
             clearInterval(timerInterval);
             status.textContent = "🛑 録音停止";
 
-            const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/wav";
             const blob = new Blob(chunks, { type: mimeType });
+            const filename = mimeType === "audio/webm" ? "recording.webm" : "recording.mp4";
+
             audioPlayer.src = URL.createObjectURL(blob);
             audioPlayer.style.display = "block";
 
             // OpenAIサーバーへ送信
             const formData = new FormData();
-            formData.append("file", blob, "recording.wav");
+            formData.append("file", blob, filename);
 
             status.textContent = "⌛ 文字起こし＆要約中...お待ちください。";
 
@@ -90,7 +103,7 @@ startBtn.onclick = async () => {
 
         mediaRecorder.start();
     } catch (err) {
-        alert("マイクの使用が許可されていないか、エラーが発生しました。");
+        alert("マイクの使用が許可されていないか、録音機能がこのブラウザで無効になっています。");
         console.error(err);
     }
 };
