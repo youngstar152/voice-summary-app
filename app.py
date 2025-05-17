@@ -80,7 +80,7 @@ function stopRecording() {
 st.components.v1.html(recording_js, height=200)
 
 # 音声データ受け取り用（非表示）
-audio_base64 = st.text_area("audio_data_textarea", value="", height=10, key="audio_data_textarea")
+audio_base64 = st.text_area("audio_data_textarea", value="", height=100, key="audio_data_textarea")
 
 # 音声データが来たら処理
 if audio_base64:
