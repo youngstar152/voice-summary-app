@@ -45,7 +45,7 @@ async def transcribe_audio(file: UploadFile = File(...)):
 
     # GPTのChatCompletionも非同期で呼び出し
     def call_chat():
-        return openai.ChatCompletion.create(
+        return client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "以下の文章を要約してください。"},
