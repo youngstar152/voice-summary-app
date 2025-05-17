@@ -38,11 +38,15 @@ def call_chat(transcript_text: str):
 
 @app.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
+    # 念のためファイルポインタを先頭に戻す
+    await file.seek(0)
     audio_bytes = await file.read()
+    if not audio_bytes:
+        return {"error": "アップロードされたファイルが空です"}
     print("Uploaded file type:", file.content_type)
     audio_file = BytesIO(audio_bytes)
     audio_file.name = file.filename  # Whisper APIには file.name が必要
-
+    audio_file.seek(0)  # 念のため先頭に戻す
     # Whisperで文字起こし（非同期）
     def call_whisper():
         audio_file.seek(0)
