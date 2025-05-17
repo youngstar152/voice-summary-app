@@ -22,7 +22,7 @@ let mediaRecorder;
 let chunks = [];
 let startTime;
 let timerInterval;
-let stream; // ← streamを外に出す
+let stream;
 
 const startBtn = document.getElementById("startBtn");
 const stopBtn = document.getElementById("stopBtn");
@@ -74,13 +74,6 @@ startBtn.onclick = async () => {
         mediaRecorder.onstop = async () => {
             clearInterval(timerInterval);
 
-            // 0.5秒後に最後の data を強制的に取得
-            await new Promise((resolve) => setTimeout(resolve, 500));
-            mediaRecorder.requestData();
-
-            // さらに 0.5秒後にすべての chunks が揃ったと仮定
-            await new Promise((resolve) => setTimeout(resolve, 700));
-
             const blob = new Blob(chunks, { type: mimeType });
             const filename = `recording.${fileExt}`;
 
@@ -109,9 +102,11 @@ startBtn.onclick = async () => {
                 resultDiv.textContent = error.message;
             }
 
-            // 🟢 再録音可能にする
             startBtn.disabled = false;
             stopBtn.disabled = true;
+
+            // 🎯 再録音可能にするため stream を止める
+            stream.getTracks().forEach(track => track.stop());
         };
 
         mediaRecorder.start();
@@ -123,7 +118,7 @@ startBtn.onclick = async () => {
 
 stopBtn.onclick = () => {
     if (mediaRecorder && mediaRecorder.state === "recording") {
-        mediaRecorder.stop();  // この後 ondataavailable が最後に1回呼ばれる
+        mediaRecorder.stop();
     }
 };
 </script>
