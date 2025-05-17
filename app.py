@@ -1,8 +1,9 @@
 import streamlit as st
 import openai
 from io import BytesIO
+import os
 
-openai.api_key = st.secrets["OPENAI_API_KEY"] if "OPENAI_API_KEY" in st.secrets else "YOUR_OPENAI_API_KEY"
+openai.api_key = os.environ.get("OPENAI_API_KEY", "YOUR_OPENAI_API_KEY")
 
 st.title("録音開始・停止で音声文字起こし＆要約")
 
