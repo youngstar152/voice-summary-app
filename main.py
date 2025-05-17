@@ -5,6 +5,8 @@ from fastapi.staticfiles import StaticFiles
 from io import BytesIO
 from openai import OpenAI
 from fastapi.concurrency import run_in_threadpool
+from pydub import AudioSegment
+import tempfile
 #ひとまず動く
 app = FastAPI()
 
@@ -44,19 +46,43 @@ async def transcribe_audio(file: UploadFile = File(...)):
     if not audio_bytes:
         return {"error": "アップロードされたファイルが空です"}
     print("Uploaded file type:", file.content_type)
-    audio_file = BytesIO(audio_bytes)
-    audio_file.name = file.filename  # Whisper APIには file.name が必要
-    audio_file.seek(0)  # 念のため先頭に戻す
-    # Whisperで文字起こし（非同期）
-    def call_whisper():
-        audio_file.seek(0)
-        return client.audio.transcriptions.create(
-            file=audio_file,
-            model="whisper-1",
-            language="ja"
-        )
+    # ファイル拡張子を取得
+    filename = file.filename
+    ext = filename.split('.')[-1].lower()
+    
+     # 一時ファイルに書き出す
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as temp_input:
+        temp_input.write(audio_bytes)
+        input_path = temp_input.name
 
-    transcript_response = await run_in_threadpool(call_whisper)
+    # mp4など非対応形式を wav に変換
+    if ext in ["mp4", "m4a", "aac", "webm"]:
+        # 出力ファイルを作成
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_wav:
+            output_path = temp_wav.name
+
+        # pydub で変換
+        audio = AudioSegment.from_file(input_path)
+        audio.export(output_path, format="wav")
+
+        # Whisper 用にバイナリ読み込み
+        with open(output_path, "rb") as f:
+            transcript_response = await run_in_threadpool(lambda: client.audio.transcriptions.create(
+                file=f,
+                model="whisper-1",
+                language="ja"
+            ))
+            
+    else:
+        audio_file = BytesIO(audio_bytes)
+        audio_file.name = file.filename  # Whisper APIには file.name が必要
+        audio_file.seek(0)  # 念のため先頭に戻す
+        # Whisperで文字起こし（非同期）
+        transcript_response = await run_in_threadpool(lambda: client.audio.transcriptions.create(
+                file=audio_file,
+                model="whisper-1",
+                language="ja"
+            ))
     transcription_text = transcript_response.text
 
     # ChatGPTで要約（非同期）
