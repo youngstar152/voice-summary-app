@@ -47,7 +47,8 @@ async def transcribe_audio(file: UploadFile = File(...)):
         audio_file.seek(0)
         return client.audio.transcriptions.create(
             file=audio_file,
-            model="whisper-1"
+            model="whisper-1",
+            language="ja"
         )
 
     transcript_response = await run_in_threadpool(call_whisper)
