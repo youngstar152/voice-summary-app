@@ -18,7 +18,12 @@ app.add_middleware(
 
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/static", StaticFiles(directory="static", html=True), name="static")
+# ルートでindex.htmlを返す（オプション）
+from fastapi.responses import FileResponse
+@app.get("/")
+async def root():
+    return FileResponse("static/index.html")
 
 @app.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
