@@ -3,7 +3,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from io import BytesIO
-import openai import OpenAI
+from openai import OpenAI
 from fastapi.concurrency import run_in_threadpool
 
 app = FastAPI()
