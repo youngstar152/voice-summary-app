@@ -3,6 +3,7 @@ import openai
 from io import BytesIO
 import os
 import base64
+import time
 
 openai.api_key = os.environ.get("OPENAI_API_KEY", "YOUR_OPENAI_API_KEY")
 
@@ -13,7 +14,6 @@ st.write("""
 停止すると音声ファイルがアップロードされ、文字起こしと要約が行われます。
 """)
 
-# HTML + JS で録音 + タイマー付きUI
 recording_js = """
 <script>
 let mediaRecorder;
@@ -26,7 +26,6 @@ function startRecording() {
         mediaRecorder.start();
         audioChunks = [];
 
-        // 録音時間タイマー
         let startTime = Date.now();
         document.getElementById("timer").innerText = "⏱️ 録音中: 0 秒";
 
@@ -49,7 +48,6 @@ function startRecording() {
             audioElement.src = audioUrl;
             audioElement.style.display = "block";
 
-            // Streamlitへファイル送信
             const reader = new FileReader();
             reader.readAsDataURL(audioBlob);
             reader.onloadend = () => {
@@ -77,34 +75,38 @@ function stopRecording() {
 <audio id="audio_play" controls style="display:none; margin-top: 10px;"></audio>
 """
 
-st.components.v1.html(recording_js, height=200)
+st.components.v1.html(recording_js, height=250)
 
-# 音声データ受け取り用（非表示）
+# 非表示のtextareaでJavaScriptから音声データを受け取る
 audio_base64 = st.text_area("audio_data_textarea", value="", height=100, key="audio_data_textarea")
 
-# 音声データが来たら処理
 if audio_base64:
     st.audio(audio_base64, format="audio/wav")
+    st.write("🟢 音声データを受信しました。処理を開始します...")
 
-    header, encoded = audio_base64.split(",", 1)
-    audio_bytes = base64.b64decode(encoded)
+    # 処理開始をユーザーに見せる
+    with st.spinner("要約を生成中...お待ちください。"):
+        try:
+            header, encoded = audio_base64.split(",", 1)
+            audio_bytes = base64.b64decode(encoded)
 
-    with BytesIO(audio_bytes) as audio_file:
-        transcript = openai.Audio.transcribe("whisper-1", audio_file)
+            with BytesIO(audio_bytes) as audio_file:
+                transcript = openai.Audio.transcribe("whisper-1", audio_file)
 
-    st.write("### 📝 文字起こし結果")
-    st.write(transcript["text"])
+            st.write("### 📝 文字起こし結果")
+            st.write(transcript["text"])
 
-    with st.spinner("✨ 要約生成中... しばらくお待ちください"):
-        response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "以下の文章を要約してください。"},
-                {"role": "user", "content": transcript["text"]},
-            ],
-            max_tokens=200,
-            temperature=0.5,
-        )
-    summary = response["choices"][0]["message"]["content"]
-    st.write("### ✨ 要約")
-    st.write(summary)
+            response = openai.ChatCompletion.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "以下の文章を要約してください。"},
+                    {"role": "user", "content": transcript["text"]},
+                ],
+                max_tokens=200,
+                temperature=0.5,
+            )
+            summary = response["choices"][0]["message"]["content"]
+            st.write("### ✨ 要約")
+            st.write(summary)
+        except Exception as e:
+            st.error(f"エラーが発生しました: {e}")
