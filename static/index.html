@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>録音→文字起こし→要約デモ</title>
+</head>
+<body>
+<h1>🎤 録音して文字起こし＆要約</h1>
+
+<button id="startBtn">録音開始</button>
+<button id="stopBtn" disabled>録音停止</button>
+
+<p id="status">⏱️ 録音前</p>
+
+<audio id="audioPlayer" controls style="display:none; margin-top:10px;"></audio>
+
+<div id="result" style="margin-top:20px;"></div>
+
+<script>
+let mediaRecorder;
+let chunks = [];
+let startTime;
+let timerInterval;
+
+const startBtn = document.getElementById("startBtn");
+const stopBtn = document.getElementById("stopBtn");
+const status = document.getElementById("status");
+const audioPlayer = document.getElementById("audioPlayer");
+const resultDiv = document.getElementById("result");
+
+startBtn.onclick = async () => {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        chunks = [];
+        mediaRecorder.ondataavailable = e => {
+            if (e.data.size > 0) chunks.push(e.data);
+        };
+
+        mediaRecorder.onstart = () => {
+            startTime = Date.now();
+            status.textContent = "⏱️ 録音中: 0秒";
+            timerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                status.textContent = `⏱️ 録音中: ${elapsed}秒`;
+            }, 1000);
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            resultDiv.innerHTML = "";
+            audioPlayer.style.display = "none";
+            audioPlayer.src = "";
+        };
+
+        mediaRecorder.onstop = async () => {
+            clearInterval(timerInterval);
+            status.textContent = "🛑 録音停止";
+
+            const blob = new Blob(chunks, { type: "audio/wav" });
+            audioPlayer.src = URL.createObjectURL(blob);
+            audioPlayer.style.display = "block";
+
+            // OpenAIサーバーへ送信
+            const formData = new FormData();
+            formData.append("file", blob, "recording.wav");
+
+            status.textContent = "⌛ 文字起こし＆要約中...お待ちください。";
+
+            try {
+                const response = await fetch("http://localhost:8000/transcribe", {
+                    method: "POST",
+                    body: formData
+                });
+                if (!response.ok) throw new Error("サーバーエラー");
+                const data = await response.json();
+
+                status.textContent = "✅ 処理完了";
+                resultDiv.innerHTML =
+                    `<h3>📝 文字起こし結果</h3><p>${data.transcript}</p>` +
+                    `<h3>✨ 要約</h3><p>${data.summary}</p>`;
+            } catch (error) {
+                status.textContent = "❌ エラーが発生しました";
+                resultDiv.textContent = error.message;
+            }
+
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        };
+
+        mediaRecorder.start();
+    } catch (err) {
+        alert("マイクの使用が許可されていないか、エラーが発生しました。");
+        console.error(err);
+    }
+};
+
+stopBtn.onclick = () => {
+    if (mediaRecorder && mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
+    }
+};
+</script>
+
+</body>
+</html>

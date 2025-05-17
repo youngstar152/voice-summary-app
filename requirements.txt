@@ -1,6 +1,9 @@
-streamlit
-streamlit-webrtc
-pydub
-numpy
-av
+# streamlit
+# streamlit-webrtc
+# pydub
+# numpy
+# av
+# openai
+fastapi
+uvicorn[standard]
 openai
