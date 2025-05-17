@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from io import BytesIO
 from openai import OpenAI
 from fastapi.concurrency import run_in_threadpool
-
+#ひとまず動く
 app = FastAPI()
 
 app.add_middleware(
