@@ -41,21 +41,25 @@ async def transcribe_audio(file: UploadFile = File(...)):
         )
 
     transcript_response = await run_in_threadpool(call_whisper)
-    text = transcript_response.text
+    transcription_text  = transcript_response.text
 
     # GPTのChatCompletionも非同期で呼び出し
     def call_chat():
         return client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "以下の文章を要約してください。"},
-                {"role": "user", "content": text},
+                {"role": "system", "content": "You are a helpful assistant that summarizes text."},
+                {"role": "user", "content": f"次の文章を短く要約してください:\n{transcription_text}"}
             ],
             max_tokens=200,
             temperature=0.5,
         )
 
     response = await run_in_threadpool(call_chat)
-    summary = response["choices"][0]["message"]["content"]
+    summary = response.choices[0].message.content
 
-    return {"transcript": text, "summary": summary}
+    # 文字起こしと要約の両方をJSONで返す
+    return {
+        "transcription": transcription_text,
+        "summary": summary,
+    }

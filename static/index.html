@@ -76,7 +76,7 @@ startBtn.onclick = async () => {
 
                 status.textContent = "✅ 処理完了";
                 resultDiv.innerHTML =
-                    `<h3>📝 文字起こし結果</h3><p>${data.transcript}</p>` +
+                    `<h3>📝 文字起こし結果</h3><p>${data.transcription}</p>` +
                     `<h3>✨ 要約</h3><p>${data.summary}</p>`;
             } catch (error) {
                 status.textContent = "❌ エラーが発生しました";
