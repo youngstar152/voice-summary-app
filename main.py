@@ -26,13 +26,23 @@ from fastapi.responses import FileResponse
 async def root():
     return FileResponse("static/index.html")
 
+def call_chat(transcript_text: str):
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "次の文字起こし結果を短く要約してください。"},
+            {"role": "user", "content": transcript_text}
+        ]
+    )
+    return response.choices[0].message.content
+
 @app.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
     audio_bytes = await file.read()
     audio_file = BytesIO(audio_bytes)
-    audio_file.name = file.filename  # これが重要（Whisper APIがファイル名を使う）
+    audio_file.name = file.filename  # Whisper APIには file.name が必要
 
-    # Whisperの同期APIを非同期で呼び出す
+    # Whisperで文字起こし（非同期）
     def call_whisper():
         audio_file.seek(0)
         return client.audio.transcriptions.create(
@@ -41,24 +51,12 @@ async def transcribe_audio(file: UploadFile = File(...)):
         )
 
     transcript_response = await run_in_threadpool(call_whisper)
-    transcription_text  = transcript_response.text
+    transcription_text = transcript_response.text
 
-    # GPTのChatCompletionも非同期で呼び出し
-    def call_chat():
-        return client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that summarizes text."},
-                {"role": "user", "content": f"次の文章を短く要約してください:\n{transcription_text}"}
-            ],
-            max_tokens=200,
-            temperature=0.5,
-        )
+    # ChatGPTで要約（非同期）
+    summary = await run_in_threadpool(lambda: call_chat(transcription_text))
 
-    response = await run_in_threadpool(call_chat)
-    summary = response.choices[0].message.content
-
-    # 文字起こしと要約の両方をJSONで返す
+    # 結果を返す
     return {
         "transcription": transcription_text,
         "summary": summary,
