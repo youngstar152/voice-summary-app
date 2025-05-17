@@ -54,46 +54,8 @@ startBtn.onclick = async () => {
         }
 
         mediaRecorder = new MediaRecorder(stream, { mimeType });
-        
-
-        mediaRecorder.ondataavailable =async e => {
-            if (e.data.size > 0) chunks.push(e.data);
-             // onstop 後に最後の dataavailable が呼ばれるのでここで送信
-            if (mediaRecorder.state === "inactive") {
-                const blob = new Blob(chunks, { type: mimeType });
-                const filename = `recording.${fileExt}`;
-
-                audioPlayer.src = URL.createObjectURL(blob);
-                audioPlayer.style.display = "block";
-
-                const formData = new FormData();
-                formData.append("file", blob, filename);
-
-                status.textContent = "⌛ 文字起こし＆要約中...お待ちください。";
-
-                try {
-                    const response = await fetch("https://voice-summary-app.onrender.com/transcribe", {
-                        method: "POST",
-                        body: formData
-                    });
-                    if (!response.ok) throw new Error("サーバーエラー");
-                    const data = await response.json();
-
-                    status.textContent = "✅ 処理完了";
-                    resultDiv.innerHTML =
-                        `<h3>📝 文字起こし結果</h3><p>${data.transcription}</p>` +
-                        `<h3>✨ 要約</h3><p>${data.summary}</p>`;
-                } catch (error) {
-                    status.textContent = "❌ エラーが発生しました";
-                    resultDiv.textContent = error.message;
-                }
-
-                // ストリーム停止
-                stream.getTracks().forEach(track => track.stop());
-                startBtn.disabled = false;
-                stopBtn.disabled = true;
-            }
-        };
+        let stopResolve;
+        const stopped = new Promise(resolve => (stopResolve = resolve));
 
         mediaRecorder.onstart = () => {
             startTime = Date.now();
@@ -109,9 +71,45 @@ startBtn.onclick = async () => {
             audioPlayer.src = "";
         };
 
-        mediaRecorder.onstop =  () => {
+        mediaRecorder.ondataavailable = e => {
+            if (e.data.size > 0) chunks.push(e.data);
+        };
+        
+
+        mediaRecorder.onstop = async () => {
             clearInterval(timerInterval);
-            status.textContent = "🛑 録音停止";            
+
+            // データが揃うまで少し待つ（requestDataで最後のチャンクを取得）
+            await new Promise(r => setTimeout(r, 300)); // 少しだけ待機（必要に応じて調整）
+
+            const blob = new Blob(chunks, { type: mimeType });
+            const filename = `recording.${fileExt}`;
+            audioPlayer.src = URL.createObjectURL(blob);
+            audioPlayer.style.display = "block";
+
+            const formData = new FormData();
+            formData.append("file", blob, filename);
+
+            status.textContent = "⌛ 文字起こし＆要約中...お待ちください。";
+
+            try {
+                const response = await fetch("https://voice-summary-app.onrender.com/transcribe", {
+                    method: "POST",
+                    body: formData
+                });
+                if (!response.ok) throw new Error("サーバーエラー");
+                const data = await response.json();
+
+                status.textContent = "✅ 処理完了";
+                resultDiv.innerHTML =
+                    `<h3>📝 文字起こし結果</h3><p>${data.transcription}</p>` +
+                    `<h3>✨ 要約</h3><p>${data.summary}</p>`;
+            } catch (error) {
+                status.textContent = "❌ エラーが発生しました";
+                resultDiv.textContent = error.message;
+            }
+
+            stopResolve();
         };
 
         mediaRecorder.start();
@@ -121,8 +119,9 @@ startBtn.onclick = async () => {
     }
 };
 
-stopBtn.onclick = () => {
+stopBtn.onclick =async ()=> {
     if (mediaRecorder && mediaRecorder.state === "recording") {
+        mediaRecorder.requestData(); // 最後のデータを要求
         mediaRecorder.stop();
     }
 };
