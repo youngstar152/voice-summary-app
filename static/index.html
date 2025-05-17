@@ -67,7 +67,7 @@ startBtn.onclick = async () => {
             status.textContent = "⌛ 文字起こし＆要約中...お待ちください。";
 
             try {
-                const response = await fetch("http://localhost:8000/transcribe", {
+                const response = await fetch("https://voice-summary-app.onrender.com/transcribe", {
                     method: "POST",
                     body: formData
                 });
