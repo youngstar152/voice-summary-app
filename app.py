@@ -1,36 +1,92 @@
 import streamlit as st
 import openai
-import tempfile
+from io import BytesIO
 
-st.set_page_config(page_title="音声要約アプリ", layout="wide")  # ✅ モバイルでも画面を広く使う
+openai.api_key = st.secrets["OPENAI_API_KEY"] if "OPENAI_API_KEY" in st.secrets else "YOUR_OPENAI_API_KEY"
 
-st.title("🎤 音声を文字起こし & 要約（スマホ対応）")
-st.markdown("スマホで録音し、ファイルをアップロードしてください。")
+st.title("録音開始・停止で音声文字起こし＆要約")
 
-# ✅ 音声アップロード
-uploaded_file = st.file_uploader("音声ファイルをアップロード（m4a / mp3 / webm など対応）", type=["mp3", "m4a", "webm", "wav"])
+st.write("""
+以下のボタンで録音を開始・停止してください。  
+停止すると音声ファイルがアップロードされ、文字起こしと要約が行われます。
+""")
 
-if uploaded_file is not None:
-    st.audio(uploaded_file, format='audio/webm')  # ✅ 音声再生可能（スマホでも確認できる）
+# HTML + JSで録音UIを作成
+recording_js = """
+<script>
+let mediaRecorder;
+let audioChunks = [];
+let audioBlob;
+let audioUrl;
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp_file:
-        tmp_file.write(uploaded_file.read())
-        tmp_path = tmp_file.name
+function startRecording() {
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.start();
+        audioChunks = [];
+        mediaRecorder.addEventListener("dataavailable", event => {
+            audioChunks.push(event.data);
+        });
+        mediaRecorder.addEventListener("stop", () => {
+            audioBlob = new Blob(audioChunks, {type: 'audio/wav'});
+            audioUrl = URL.createObjectURL(audioBlob);
+            const audioElement = document.getElementById("audio_play");
+            audioElement.src = audioUrl;
+            audioElement.style.display = "block";
 
-    with st.spinner("⏳ Whisperで文字起こし中..."):
-        openai.api_key = st.secrets["OPENAI_API_KEY"]
-        transcript = openai.Audio.transcribe("whisper-1", open(tmp_path, "rb"))
-        text = transcript["text"]
-        st.subheader("📝 文字起こし結果")
-        st.write(text)
+            // Streamlitへファイル送信
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = () => {
+                const base64data = reader.result;
+                // Streamlitのtextareaにセットして送信ボタン押しやすくする
+                const el = window.parent.document.getElementById("audio_data_textarea");
+                el.value = base64data;
+                el.dispatchEvent(new Event('input'));
+            };
+        });
+    });
+}
 
-    with st.spinner("💡 GPTで要約中..."):
-        summary_prompt = f"以下の文章を簡潔に要約してください：\n\n{text}"
-        summary_response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": summary_prompt}],
-            temperature=0.5,
-        )
-        summary = summary_response["choices"][0]["message"]["content"]
-        st.subheader("🔍 要約")
-        st.write(summary)
+function stopRecording() {
+    mediaRecorder.stop();
+}
+</script>
+
+<button onclick="startRecording()">録音開始</button>
+<button onclick="stopRecording()">録音停止</button>
+<br>
+<audio id="audio_play" controls style="display:none"></audio>
+"""
+
+st.components.v1.html(recording_js, height=150)
+
+# base64の音声データをhidden textareaで受け取る（Streamlit側）
+audio_base64 = st.text_area("audio_data_textarea", value="", height=10, key="audio_data_textarea")
+
+if audio_base64:
+    st.audio(audio_base64, format="audio/wav")
+    # base64からバイナリに変換
+    import base64
+    header, encoded = audio_base64.split(",", 1)
+    audio_bytes = base64.b64decode(encoded)
+
+    # Whisper APIに送信
+    with BytesIO(audio_bytes) as audio_file:
+        transcript = openai.Audio.transcribe("whisper-1", audio_file)
+
+    st.write("=== 文字起こし結果 ===")
+    st.write(transcript["text"])
+
+    response = openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "以下の文章を要約してください。"},
+            {"role": "user", "content": transcript["text"]},
+        ],
+        max_tokens=200,
+        temperature=0.5,
+    )
+    summary = response["choices"][0]["message"]["content"]
+    st.write("=== 要約 ===")
+    st.write(summary)

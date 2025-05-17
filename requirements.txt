@@ -1,2 +1,6 @@
 streamlit
+streamlit-webrtc
+pydub
+numpy
+av
 openai
