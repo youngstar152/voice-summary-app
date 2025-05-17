@@ -39,6 +39,7 @@ def call_chat(transcript_text: str):
 @app.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
     audio_bytes = await file.read()
+    print("Uploaded file type:", file.content_type)
     audio_file = BytesIO(audio_bytes)
     audio_file.name = file.filename  # Whisper APIには file.name が必要
 

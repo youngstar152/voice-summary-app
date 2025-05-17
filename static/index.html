@@ -34,12 +34,18 @@ startBtn.onclick = async () => {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
         let mimeType = "";
+        let fileExt = "";
         if (MediaRecorder.isTypeSupported("audio/webm")) {
             mimeType = "audio/webm";
+            fileExt = "webm";
+        } else if (MediaRecorder.isTypeSupported("audio/wav")) {
+            mimeType = "audio/wav";
+            fileExt = "wav";
         } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
             mimeType = "audio/mp4";
+            fileExt = "mp4";
         } else {
-            alert("このブラウザでは録音がサポートされていません。別のブラウザ（例: Chrome）をお試しください。");
+            alert("このブラウザでは録音がサポートされていません。別のブラウザをお試しください。");
             return;
         }
 
@@ -69,7 +75,7 @@ startBtn.onclick = async () => {
             status.textContent = "🛑 録音停止";
 
             const blob = new Blob(chunks, { type: mimeType });
-            const filename = mimeType === "audio/webm" ? "recording.webm" : "recording.mp4";
+            const filename = `recording.${fileExt}`;
 
             audioPlayer.src = URL.createObjectURL(blob);
             audioPlayer.style.display = "block";
