@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from io import BytesIO
 import openai
+from fastapi.concurrency import run_in_threadpool
 
 app = FastAPI()
 
@@ -26,7 +27,15 @@ async def transcribe_audio(file: UploadFile = File(...)):
     audio_file = BytesIO(audio_bytes)
 
     # Whisperで文字起こし
-    transcript = openai.Audio.transcribe("whisper-1", audio_file)
+    # Whisperの同期APIを非同期で呼び出し
+    def call_whisper():
+        return openai.Audio.transcribe(
+            "whisper-1", 
+            audio_file, 
+            file=file.filename,
+            # content_type=file.content_type,  # もし必要なら
+        )
+    transcript = await run_in_threadpool(call_whisper)
     text = transcript["text"]
 
     # GPTで要約
