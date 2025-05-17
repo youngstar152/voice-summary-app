@@ -95,15 +95,16 @@ if audio_base64:
     st.write("### 📝 文字起こし結果")
     st.write(transcript["text"])
 
-    response = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "以下の文章を要約してください。"},
-            {"role": "user", "content": transcript["text"]},
-        ],
-        max_tokens=200,
-        temperature=0.5,
-    )
+    with st.spinner("✨ 要約生成中... しばらくお待ちください"):
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "以下の文章を要約してください。"},
+                {"role": "user", "content": transcript["text"]},
+            ],
+            max_tokens=200,
+            temperature=0.5,
+        )
     summary = response["choices"][0]["message"]["content"]
     st.write("### ✨ 要約")
     st.write(summary)
