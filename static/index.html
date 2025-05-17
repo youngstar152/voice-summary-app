@@ -56,13 +56,13 @@ startBtn.onclick = async () => {
             clearInterval(timerInterval);
             status.textContent = "🛑 録音停止";
 
-            const blob = new Blob(chunks, { type: "audio/wav" });
+            const blob = new Blob(chunks, { type: "audio/webm" });
             audioPlayer.src = URL.createObjectURL(blob);
             audioPlayer.style.display = "block";
 
             // OpenAIサーバーへ送信
             const formData = new FormData();
-            formData.append("file", blob, "recording.wav");
+            formData.append("file", blob, "audio.webm");
 
             status.textContent = "⌛ 文字起こし＆要約中...お待ちください。";
 

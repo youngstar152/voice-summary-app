@@ -40,7 +40,7 @@ def call_chat(transcript_text: str):
 async def transcribe_audio(file: UploadFile = File(...)):
     audio_bytes = await file.read()
     audio_file = BytesIO(audio_bytes)
-    audio_file.name = file.filename  # Whisper APIには file.name が必要
+    audio_file.name = "audio.webm"  # Whisper APIには file.name が必要
 
     # Whisperで文字起こし（非同期）
     def call_whisper():
