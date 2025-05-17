@@ -3,7 +3,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from io import BytesIO
-import openai
+import openai import OpenAI
 from fastapi.concurrency import run_in_threadpool
 
 app = FastAPI()
@@ -16,7 +16,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-openai.api_key = os.environ.get("OPENAI_API_KEY")
+openai_api_key = os.environ.get("OPENAI_API_KEY")
+client = OpenAI(api_key=openai_api_key)
 
 app.mount("/static", StaticFiles(directory="static", html=True), name="static")
 # ルートでindex.htmlを返す（オプション）
@@ -34,13 +35,13 @@ async def transcribe_audio(file: UploadFile = File(...)):
     # Whisperの同期APIを非同期で呼び出す
     def call_whisper():
         audio_file.seek(0)
-        return openai.Audio.transcribe(
-            model="whisper-1",
+        return client.audio.transcriptions.create(
             file=audio_file,
+            model="whisper-1"
         )
 
-    transcript = await run_in_threadpool(call_whisper)
-    text = transcript["text"]
+    transcript_response = await run_in_threadpool(call_whisper)
+    text = transcript_response.text
 
     # GPTのChatCompletionも非同期で呼び出し
     def call_chat():
