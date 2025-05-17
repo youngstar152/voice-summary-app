@@ -56,7 +56,8 @@ startBtn.onclick = async () => {
             clearInterval(timerInterval);
             status.textContent = "🛑 録音停止";
 
-            const blob = new Blob(chunks, { type: "audio/wav" });
+            const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/wav";
+            const blob = new Blob(chunks, { type: mimeType });
             audioPlayer.src = URL.createObjectURL(blob);
             audioPlayer.style.display = "block";
 
