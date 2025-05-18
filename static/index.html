@@ -30,10 +30,11 @@
     let stream;
     let chunkPromises = [];
     let timerInterval;
-    let isStopping = false;
-
     let mimeType = "audio/webm";
     let fileExt = "webm";
+    let resolveLastChunk;
+    let lastChunkPromise;
+    let isStopping = false;
 
     if (MediaRecorder.isTypeSupported("audio/webm")) {
       mimeType = "audio/webm";
@@ -81,21 +82,36 @@
         } else {
           console.log("無効なチャンクをスキップしました size:", e.data.size);
         }
+
+        // 最後のチャンク受信通知
+        if (resolveLastChunk) {
+          resolveLastChunk();
+          resolveLastChunk = null;
+        }
       };
 
       mediaRecorder.onstop = async () => {
         clearInterval(timerInterval);
         status.textContent = "⌛ 最終データ処理中...";
 
-        try {
-          await Promise.all(chunkPromises);
-          const fullText = transcripts.join("\n").trim();
-          if (!fullText) {
-            status.textContent = "⚠️ 文字起こしが空でした。";
-            return;
-          }
+        // 最後のチャンクの受信を待つ Promise を作成
+        lastChunkPromise = new Promise((resolve) => {
+          resolveLastChunk = resolve;
+        });
 
-          status.textContent = "⌛ 要約中...";
+        mediaRecorder.requestData(); // 最後のデータ要求
+
+        await lastChunkPromise;
+        await Promise.all(chunkPromises);
+
+        const fullText = transcripts.join("\n").trim();
+        if (!fullText) {
+          status.textContent = "⚠️ 文字起こしが空でした。";
+          return;
+        }
+
+        status.textContent = "⌛ 要約中...";
+        try {
           const response = await fetch("https://voice-summary-app.onrender.com/summarize", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -129,7 +145,7 @@
         stream.getTracks().forEach(track => track.stop());
       };
 
-      mediaRecorder.start(60000); // 1分ごとにチャンクを生成
+      mediaRecorder.start(60000); // 1分ごとのチャンク
       startBtn.disabled = true;
       stopBtn.disabled = false;
 
@@ -144,13 +160,7 @@
       if (isStopping) return;
       isStopping = true;
       status.textContent = "🛑 録音停止中...";
-      
-      // 最後のデータ取得してから stop
-      mediaRecorder.requestData();
-
-      setTimeout(() => {
-        mediaRecorder.stop();
-      }, 300); // 少し待ってから stop
+      mediaRecorder.stop();
     };
   </script>
 </body>
