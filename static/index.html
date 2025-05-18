@@ -19,20 +19,23 @@
 
 <script>
 let mediaRecorder;
-let chunks = [];
-let startTime;
-let timerInterval;
 let stream;
+let timerInterval;
+let sendInterval;
+let chunks = [];
+let transcriptionText = "";
 
 const startBtn = document.getElementById("startBtn");
 const stopBtn = document.getElementById("stopBtn");
 const status = document.getElementById("status");
 const audioPlayer = document.getElementById("audioPlayer");
 const resultDiv = document.getElementById("result");
+const CHUNK_INTERVAL_MS = 60000;// 30秒ごとに送信
 
 startBtn.onclick = async () => {
     try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
 
         let mimeType = "";
         let fileExt = "";
@@ -50,70 +53,49 @@ startBtn.onclick = async () => {
             return;
         }
 
-        chunks = [];
-        mediaRecorder = new MediaRecorder(stream, { mimeType });
+         chunks = [];
+    transcriptionText = "";
+    status.textContent = "⏱️ 録音中: 0秒";
+    audioPlayer.style.display = "none";
+    resultDiv.innerHTML = "";
 
-        mediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0) chunks.push(e.data);
-        };
+    mediaRecorder.ondataavailable = async (e) => {
+        if (e.data.size > 0) {
+            await sendChunkToServer(e.data);
+        }
+    };
 
-        mediaRecorder.onstart = () => {
-            startTime = Date.now();
-            status.textContent = "⏱️ 録音中: 0秒";
-            timerInterval = setInterval(() => {
-                const elapsed = Math.floor((Date.now() - startTime) / 1000);
-                status.textContent = `⏱️ 録音中: ${elapsed}秒`;
-            }, 1000);
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
-            resultDiv.innerHTML = "";
-            audioPlayer.style.display = "none";
-            audioPlayer.src = "";
-        };
+    mediaRecorder.onstart = () => {
+        startTime = Date.now();
+        timerInterval = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            status.textContent = `⏱️ 録音中: ${elapsed}秒`;
+        }, 1000);
 
-        mediaRecorder.onstop = async () => {
-            clearInterval(timerInterval);
-
-            const blob = new Blob(chunks, { type: mimeType });
-            const filename = `recording.${fileExt}`;
-
-            audioPlayer.src = URL.createObjectURL(blob);
-            audioPlayer.style.display = "block";
-
-            const formData = new FormData();
-            formData.append("file", blob, filename);
-
-            status.textContent = "⌛ 文字起こし＆要約中...お待ちください。";
-
-            try {
-                const response = await fetch("https://voice-summary-app.onrender.com/transcribe", {
-                    method: "POST",
-                    body: formData,
-                });
-                if (!response.ok) throw new Error("サーバーエラー");
-                const data = await response.json();
-
-                status.textContent = "✅ 処理完了";
-                resultDiv.innerHTML =
-                    `<h3>📝 文字起こし結果</h3><p>${data.transcription}</p>` +
-                    `<h3>✨ 要約</h3><p>${data.summary}</p>`;
-            } catch (error) {
-                status.textContent = "❌ エラーが発生しました";
-                resultDiv.textContent = error.message;
+        sendInterval = setInterval(() => {
+            if (mediaRecorder.state === "recording") {
+                mediaRecorder.requestData(); // チャンクを取得
             }
+        }, CHUNK_INTERVAL_MS);
 
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+    };
 
-            // 🎯 再録音可能にするため stream を止める
-            stream.getTracks().forEach(track => track.stop());
-        };
+        mediaRecorder.onstop = () => {
+        clearInterval(timerInterval);
+        clearInterval(sendInterval);
+        stream.getTracks().forEach((track) => track.stop());
 
-        mediaRecorder.start();
-    } catch (err) {
-        alert("マイクの使用が許可されていないか、録音機能がこのブラウザで無効になっています。");
-        console.error(err);
-    }
+        stopBtn.disabled = true;
+        startBtn.disabled = false;
+
+        status.textContent = "✅ 録音終了・まとめ中...";
+        summarizeTranscription();
+    };
+
+    mediaRecorder.start();
+    };
 };
 
 stopBtn.onclick = () => {
@@ -121,6 +103,36 @@ stopBtn.onclick = () => {
         mediaRecorder.stop();
     }
 };
+
+async function sendChunkToServer(blob) {
+    const formData = new FormData();
+    formData.append("file", blob, "chunk.webm");
+
+    try {
+        const res = await fetch("https://voice-summary-app.onrender.com/transcribe", {
+            method: "POST",
+            body: formData,
+        });
+        const data = await res.json();
+        if (data.transcription) {
+            transcriptionText += data.transcription + "\n";
+            resultDiv.innerHTML = `<h3>📝 現在の文字起こし</h3><pre>${transcriptionText}</pre>`;
+        }
+    } catch (err) {
+        console.error("送信エラー:", err);
+    }
+}
+
+async function summarizeTranscription() {
+    const res = await fetch("https://voice-summary-app.onrender.com/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: transcriptionText }),
+    });
+    const data = await res.json();
+    resultDiv.innerHTML += `<h3>✨ 要約</h3><p>${data.summary}</p>`;
+    status.textContent = "✅ 処理完了";
+}
 </script>
 
 </body>

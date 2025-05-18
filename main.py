@@ -17,6 +17,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+from pydantic import BaseModel
+
+class SummaryInput(BaseModel):
+    text: str
 
 openai_api_key = os.environ.get("OPENAI_API_KEY")
 client = OpenAI(api_key=openai_api_key)
@@ -84,12 +88,9 @@ async def transcribe_audio(file: UploadFile = File(...)):
                 language="ja"
             ))
     transcription_text = transcript_response.text
+    return {"transcription": transcript_response.text}
 
-    # ChatGPTで要約（非同期）
-    summary = await run_in_threadpool(lambda: call_chat(transcription_text))
-
-    # 結果を返す
-    return {
-        "transcription": transcription_text,
-        "summary": summary,
-    }
+@app.post("/summarize")
+async def summarize_text(data: SummaryInput):
+    summary = await run_in_threadpool(lambda: call_chat(data.text))
+    return {"summary": summary}
