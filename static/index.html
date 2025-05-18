@@ -96,72 +96,69 @@
       mediaRecorder = new MediaRecorder(stream, { mimeType });
 
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 1000) {
-          const blob = new Blob([e.data], { type: mimeType });
-          const filename = `${Date.now()}.${fileExt}`;
-          const promise = transcribeBlob(blob, filename);
-          chunkPromises.push(promise);
-        } else {
-          log("⚠️ 無効なチャンクをスキップ（size:", e.data.size, ")");
-        }
-      };
+    if (e.data && e.data.size > 1000) {
+      const blob = new Blob([e.data], { type: mimeType });
+      const filename = `${Date.now()}.${fileExt}`;
+      const promise = transcribeBlob(blob, filename);
+      chunkPromises.push(promise);
+    } else {
+      log("⚠️ 無効なチャンクをスキップ（size:", e.data.size, ")");
+    }
+  };
 
       mediaRecorder.onstop = async () => {
-        clearInterval(timerInterval);
-        status.textContent = "⌛ 最終データ処理中...";
-        log("🛑 mediaRecorder.onstop 呼び出し");
+    clearInterval(timerInterval);
+    status.textContent = "⌛ 最終データ処理中...";
+    log("🛑 mediaRecorder.onstop 呼び出し");
 
-        mediaRecorder.requestData();
+    setTimeout(async () => {
+      log("🧩 チャンク処理数:", chunkPromises.length);
+      await Promise.allSettled(chunkPromises);
+      const fullText = transcripts.join("\n").trim();
+      log("📝 全体文字数:", fullText.length);
 
-        setTimeout(async () => {
-          log("🧩 チャンク処理数:", chunkPromises.length);
-          await Promise.allSettled(chunkPromises);
-          const fullText = transcripts.join("\n").trim();
-          log("📝 全体文字数:", fullText.length);
+      if (!fullText) {
+        status.textContent = "⚠️ 文字起こしが空でした。";
+        log("❗ 空の文字起こし結果");
+        return;
+      }
 
-          if (!fullText) {
-            status.textContent = "⚠️ 文字起こしが空でした。";
-            log("❗ 空の文字起こし結果");
-            return;
-          }
+      status.textContent = "⌛ 要約中...";
+      try {
+        const response = await fetch("https://voice-summary-app.onrender.com/summarize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: fullText }),
+        });
+        const data = await response.json();
+        log("✨ 要約取得:", data.summary?.slice(0, 50));
 
-          status.textContent = "⌛ 要約中...";
-          try {
-            const response = await fetch("https://voice-summary-app.onrender.com/summarize", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ text: fullText }),
-            });
-            const data = await response.json();
-            log("✨ 要約取得:", data.summary?.slice(0, 50));
+        resultDiv.innerHTML = `
+          <h3>📝 全体文字起こし</h3><p>${fullText.replace(/\n/g, "<br>")}</p>
+          <h3>✨ 要約</h3><p>${data.summary}</p>
+          <button id="downloadBtn" style="margin-top:10px;">📄 PDFをダウンロード</button>
+        `;
+        status.textContent = "✅ 完了";
 
-            resultDiv.innerHTML = `
-              <h3>📝 全体文字起こし</h3><p>${fullText.replace(/\n/g, "<br>")}</p>
-              <h3>✨ 要約</h3><p>${data.summary}</p>
-              <button id="downloadBtn" style="margin-top:10px;">📄 PDFをダウンロード</button>
-            `;
-            status.textContent = "✅ 完了";
+        document.getElementById("downloadBtn").onclick = () => {
+          const { jsPDF } = window.jspdf;
+          const doc = new jsPDF();
+          const content = `【全体文字起こし】\n${fullText}\n\n【要約】\n${data.summary}`;
+          const lines = doc.splitTextToSize(content, 180);
+          doc.text(lines, 10, 10);
+          doc.save("transcription.pdf");
+        };
+      } catch (err) {
+        log("❌ 要約エラー:", err);
+        resultDiv.innerHTML = "<p style='color:red;'>要約エラーが発生しました。</p>";
+        status.textContent = "⚠️ 要約エラー";
+      }
 
-            document.getElementById("downloadBtn").onclick = () => {
-              const { jsPDF } = window.jspdf;
-              const doc = new jsPDF();
-              const content = `【全体文字起こし】\n${fullText}\n\n【要約】\n${data.summary}`;
-              const lines = doc.splitTextToSize(content, 180);
-              doc.text(lines, 10, 10);
-              doc.save("transcription.pdf");
-            };
-          } catch (err) {
-            log("❌ 要約エラー:", err);
-            resultDiv.innerHTML = "<p style='color:red;'>要約エラーが発生しました。</p>";
-            status.textContent = "⚠️ 要約エラー";
-          }
-
-          startBtn.disabled = false;
-          stopBtn.disabled = true;
-          stream.getTracks().forEach(track => track.stop());
-        }, 1000); // チャンク最終処理のための待ち時間
-      };
-
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      stream.getTracks().forEach(track => track.stop());
+    }, 1000);
+  };
       mediaRecorder.start(60000); // 1分ごとのチャンク
       startBtn.disabled = true;
       stopBtn.disabled = false;
@@ -174,12 +171,17 @@
     };
 
     stopBtn.onclick = () => {
-      if (isStopping) return;
-      isStopping = true;
-      log("⏹️ 録音停止ボタン押下");
-      status.textContent = "🛑 録音停止中...";
+    if (isStopping) return;
+    isStopping = true;
+    log("⏹️ 録音停止ボタン押下");
+    status.textContent = "🛑 録音停止中...";
+    
+    // 最後のチャンクをリクエストしてから stop
+    mediaRecorder.requestData();
+    setTimeout(() => {
       mediaRecorder.stop();
-    };
+    }, 500);
+  };
   </script>
 </body>
 </html>
