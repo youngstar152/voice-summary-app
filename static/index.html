@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>録音→文字起こし→要約デモ</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>録音→文字起こし→要約デモ</title>
 </head>
 <body>
 <h1>🎤 録音して文字起こし＆要約</h1>
@@ -30,108 +30,111 @@ const stopBtn = document.getElementById("stopBtn");
 const status = document.getElementById("status");
 const audioPlayer = document.getElementById("audioPlayer");
 const resultDiv = document.getElementById("result");
-const CHUNK_INTERVAL_MS = 60000;// 30秒ごとに送信
+const CHUNK_INTERVAL_MS = 60000; // 60秒ごとに送信
 
 startBtn.onclick = async () => {
-    try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-        let mimeType = "";
-        let fileExt = "";
-        if (MediaRecorder.isTypeSupported("audio/webm")) {
-            mimeType = "audio/webm";
-            fileExt = "webm";
-        } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
-            mimeType = "audio/mp4";
-            fileExt = "mp4";
-        } else if (MediaRecorder.isTypeSupported("audio/wav")) {
-            mimeType = "audio/wav";
-            fileExt = "wav";
-        } else {
-            alert("このブラウザでは録音がサポートされていません。");
-            return;
-        }
+    let mimeType = "";
+    let fileExt = "";
+    if (MediaRecorder.isTypeSupported("audio/webm")) {
+      mimeType = "audio/webm";
+      fileExt = "webm";
+    } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+      mimeType = "audio/mp4";
+      fileExt = "mp4";
+    } else if (MediaRecorder.isTypeSupported("audio/wav")) {
+      mimeType = "audio/wav";
+      fileExt = "wav";
+    } else {
+      alert("このブラウザでは録音がサポートされていません。");
+      return;
+    }
 
-         chunks = [];
+    mediaRecorder = new MediaRecorder(stream, { mimeType });
+    chunks = [];
     transcriptionText = "";
     status.textContent = "⏱️ 録音中: 0秒";
     audioPlayer.style.display = "none";
     resultDiv.innerHTML = "";
 
     mediaRecorder.ondataavailable = async (e) => {
-        if (e.data.size > 0) {
-            await sendChunkToServer(e.data);
-        }
+      if (e.data.size > 0) {
+        await sendChunkToServer(e.data);
+      }
     };
 
     mediaRecorder.onstart = () => {
-        startTime = Date.now();
-        timerInterval = setInterval(() => {
-            const elapsed = Math.floor((Date.now() - startTime) / 1000);
-            status.textContent = `⏱️ 録音中: ${elapsed}秒`;
-        }, 1000);
+      const startTime = Date.now();
+      timerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        status.textContent = `⏱️ 録音中: ${elapsed}秒`;
+      }, 1000);
 
-        sendInterval = setInterval(() => {
-            if (mediaRecorder.state === "recording") {
-                mediaRecorder.requestData(); // チャンクを取得
-            }
-        }, CHUNK_INTERVAL_MS);
+      sendInterval = setInterval(() => {
+        if (mediaRecorder.state === "recording") {
+          mediaRecorder.requestData(); // チャンクを取得
+        }
+      }, CHUNK_INTERVAL_MS);
 
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
     };
 
-        mediaRecorder.onstop = () => {
-        clearInterval(timerInterval);
-        clearInterval(sendInterval);
-        stream.getTracks().forEach((track) => track.stop());
+    mediaRecorder.onstop = () => {
+      clearInterval(timerInterval);
+      clearInterval(sendInterval);
+      stream.getTracks().forEach((track) => track.stop());
 
-        stopBtn.disabled = true;
-        startBtn.disabled = false;
+      stopBtn.disabled = true;
+      startBtn.disabled = false;
 
-        status.textContent = "✅ 録音終了・まとめ中...";
-        summarizeTranscription();
+      status.textContent = "✅ 録音終了・まとめ中...";
+      summarizeTranscription();
     };
 
-    mediaRecorder.start();
-    };
+    mediaRecorder.start(); // ✅ ← tryブロックの中、正しい位置
+  } catch (err) {
+    alert("マイクの使用が許可されていないか、録音機能がこのブラウザで無効になっています。");
+    console.error(err);
+  }
 };
 
 stopBtn.onclick = () => {
-    if (mediaRecorder && mediaRecorder.state === "recording") {
-        mediaRecorder.stop();
-    }
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    mediaRecorder.stop();
+  }
 };
 
 async function sendChunkToServer(blob) {
-    const formData = new FormData();
-    formData.append("file", blob, "chunk.webm");
+  const formData = new FormData();
+  formData.append("file", blob, "chunk.webm");
 
-    try {
-        const res = await fetch("https://voice-summary-app.onrender.com/transcribe", {
-            method: "POST",
-            body: formData,
-        });
-        const data = await res.json();
-        if (data.transcription) {
-            transcriptionText += data.transcription + "\n";
-            resultDiv.innerHTML = `<h3>📝 現在の文字起こし</h3><pre>${transcriptionText}</pre>`;
-        }
-    } catch (err) {
-        console.error("送信エラー:", err);
+  try {
+    const res = await fetch("https://voice-summary-app.onrender.com/transcribe", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+    if (data.transcription) {
+      transcriptionText += data.transcription + "\n";
+      resultDiv.innerHTML = `<h3>📝 現在の文字起こし</h3><pre>${transcriptionText}</pre>`;
     }
+  } catch (err) {
+    console.error("送信エラー:", err);
+  }
 }
 
 async function summarizeTranscription() {
-    const res = await fetch("https://voice-summary-app.onrender.com/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: transcriptionText }),
-    });
-    const data = await res.json();
-    resultDiv.innerHTML += `<h3>✨ 要約</h3><p>${data.summary}</p>`;
-    status.textContent = "✅ 処理完了";
+  const res = await fetch("https://voice-summary-app.onrender.com/summarize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: transcriptionText }),
+  });
+  const data = await res.json();
+  resultDiv.innerHTML += `<h3>✨ 要約</h3><p>${data.summary}</p>`;
+  status.textContent = "✅ 処理完了";
 }
 </script>
 
