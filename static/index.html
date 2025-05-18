@@ -30,6 +30,7 @@
     let stream;
     let chunkPromises = [];
     let timerInterval;
+    let isStopping = false;
 
     let mimeType = "audio/webm";
     let fileExt = "webm";
@@ -61,8 +62,6 @@
       }
     }
 
-    let isStopping = false;
-
     startBtn.onclick = async () => {
       transcripts = [];
       chunkPromises = [];
@@ -87,9 +86,8 @@
       mediaRecorder.onstop = async () => {
         clearInterval(timerInterval);
         status.textContent = "⌛ 最終データ処理中...";
-        mediaRecorder.requestData();
 
-        setTimeout(async () => {
+        try {
           await Promise.all(chunkPromises);
           const fullText = transcripts.join("\n").trim();
           if (!fullText) {
@@ -98,42 +96,40 @@
           }
 
           status.textContent = "⌛ 要約中...";
-          try {
-            const response = await fetch("https://voice-summary-app.onrender.com/summarize", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ text: fullText }),
-            });
-            const data = await response.json();
+          const response = await fetch("https://voice-summary-app.onrender.com/summarize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: fullText }),
+          });
+          const data = await response.json();
 
-            resultDiv.innerHTML = `
-              <h3>📝 全体文字起こし</h3><p>${fullText.replace(/\n/g, "<br>")}</p>
-              <h3>✨ 要約</h3><p>${data.summary}</p>
-              <button id="downloadBtn" style="margin-top:10px;">📄 PDFをダウンロード</button>
-            `;
-            status.textContent = "✅ 完了";
+          resultDiv.innerHTML = `
+            <h3>📝 全体文字起こし</h3><p>${fullText.replace(/\n/g, "<br>")}</p>
+            <h3>✨ 要約</h3><p>${data.summary}</p>
+            <button id="downloadBtn" style="margin-top:10px;">📄 PDFをダウンロード</button>
+          `;
+          status.textContent = "✅ 完了";
 
-            document.getElementById("downloadBtn").onclick = () => {
-              const { jsPDF } = window.jspdf;
-              const doc = new jsPDF();
-              const content = `【全体文字起こし】\n${fullText}\n\n【要約】\n${data.summary}`;
-              const lines = doc.splitTextToSize(content, 180);
-              doc.text(lines, 10, 10);
-              doc.save("transcription.pdf");
-            };
-          } catch (err) {
-            console.error("要約エラー:", err);
-            resultDiv.innerHTML = "<p style='color:red;'>要約エラーが発生しました。</p>";
-            status.textContent = "⚠️ 要約エラー";
-          }
+          document.getElementById("downloadBtn").onclick = () => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const content = `【全体文字起こし】\n${fullText}\n\n【要約】\n${data.summary}`;
+            const lines = doc.splitTextToSize(content, 180);
+            doc.text(lines, 10, 10);
+            doc.save("transcription.pdf");
+          };
+        } catch (err) {
+          console.error("要約エラー:", err);
+          resultDiv.innerHTML = "<p style='color:red;'>要約エラーが発生しました。</p>";
+          status.textContent = "⚠️ 要約エラー";
+        }
 
-          startBtn.disabled = false;
-          stopBtn.disabled = true;
-          stream.getTracks().forEach(track => track.stop());
-        }, 800); // 最終チャンクが確実に渡るように
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        stream.getTracks().forEach(track => track.stop());
       };
 
-      mediaRecorder.start(60000); // 1分ごとのチャンク
+      mediaRecorder.start(60000); // 1分ごとにチャンクを生成
       startBtn.disabled = true;
       stopBtn.disabled = false;
 
@@ -148,7 +144,13 @@
       if (isStopping) return;
       isStopping = true;
       status.textContent = "🛑 録音停止中...";
-      mediaRecorder.stop();
+      
+      // 最後のデータ取得してから stop
+      mediaRecorder.requestData();
+
+      setTimeout(() => {
+        mediaRecorder.stop();
+      }, 300); // 少し待ってから stop
     };
   </script>
 </body>
