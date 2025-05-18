@@ -32,8 +32,6 @@
     let timerInterval;
     let mimeType = "audio/webm";
     let fileExt = "webm";
-    let resolveLastChunk;
-    let lastChunkPromise;
     let isStopping = false;
 
     if (MediaRecorder.isTypeSupported("audio/webm")) {
@@ -82,25 +80,28 @@
         } else {
           console.log("無効なチャンクをスキップしました size:", e.data.size);
         }
-
-        // 最後のチャンク受信通知
-        if (resolveLastChunk) {
-          resolveLastChunk();
-          resolveLastChunk = null;
-        }
       };
 
       mediaRecorder.onstop = async () => {
         clearInterval(timerInterval);
         status.textContent = "⌛ 最終データ処理中...";
 
-        // 最後のチャンクの受信を待つ Promise を作成
-        lastChunkPromise = new Promise((resolve) => {
-          resolveLastChunk = resolve;
+        // 最後のチャンクを requestData で要求し、それを明示的に待つ
+        const lastChunkPromise = new Promise((resolve) => {
+          const handler = (e) => {
+            if (e.data && e.data.size > 0) {
+              const blob = new Blob([e.data], { type: mimeType });
+              const filename = `${Date.now()}_last.${fileExt}`;
+              const promise = transcribeBlob(blob, filename);
+              chunkPromises.push(promise);
+            }
+            mediaRecorder.removeEventListener("dataavailable", handler);
+            resolve();
+          };
+          mediaRecorder.addEventListener("dataavailable", handler);
         });
 
-        mediaRecorder.requestData(); // 最後のデータ要求
-
+        mediaRecorder.requestData();
         await lastChunkPromise;
         await Promise.all(chunkPromises);
 
