@@ -40,7 +40,7 @@ def format_time(seconds):
     return f"{h:02}:{m:02}:{s:02}"
 
 # ffmpegで音声分割（5分＋1分重複）
-def split_audio(input_path, output_dir, duration_min=5, overlap_min=1):
+def split_audio(input_path, output_dir, duration_min=3, overlap_min=1):
     result = subprocess.run(
         ["ffprobe", "-i", input_path, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0"],
         stdout=subprocess.PIPE,
@@ -73,12 +73,13 @@ def split_audio(input_path, output_dir, duration_min=5, overlap_min=1):
 # Whisperでテキスト化
 def transcribe_file(path):
     with open(path, "rb") as f:
-        return client.audio.transcriptions.create(
+        result = client.audio.transcriptions.create(
             file=f,
             model="whisper-1",
             language="ja",
             response_format="verbose_json"
         )
+        return result.model_dump()
 
 # セグメントの時刻を統合
 def merge_segments(transcripts_with_offset):
