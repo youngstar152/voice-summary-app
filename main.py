@@ -9,6 +9,9 @@ from fastapi.concurrency import run_in_threadpool
 from pydub import AudioSegment
 from io import BytesIO
 from openai import OpenAI
+from fastapi.responses import JSONResponse
+from fastapi import Request
+import traceback
 
 app = FastAPI()
 
@@ -112,46 +115,54 @@ def call_summary(text: str):
 
 @app.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
-    await file.seek(0)
-    audio_bytes = await file.read()
+    try:
+        await file.seek(0)
+        audio_bytes = await file.read()
 
-    if not audio_bytes:
-        return {"error": "ファイルが空です"}
+        if not audio_bytes:
+            return {"error": "ファイルが空です"}
 
-    # アップロード拡張子確認
-    filename = file.filename
-    ext = filename.split('.')[-1].lower()
+        # アップロード拡張子確認
+        filename = file.filename
+        ext = filename.split('.')[-1].lower()
 
-    # 一時フォルダ作成
-    with tempfile.TemporaryDirectory() as tmpdir:
-        input_path = os.path.join(tmpdir, f"input.{ext}")
+        # 一時フォルダ作成
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_path = os.path.join(tmpdir, f"input.{ext}")
 
-        # 元音声保存
-        with open(input_path, "wb") as f:
-            f.write(audio_bytes)
+            # 元音声保存
+            with open(input_path, "wb") as f:
+                f.write(audio_bytes)
 
-        # 非WAV形式なら変換
-        if ext != "wav":
-            converted_path = os.path.join(tmpdir, "converted.wav")
-            audio = AudioSegment.from_file(input_path)
-            audio.export(converted_path, format="wav")
-            input_path = converted_path
+            # 非WAV形式なら変換
+            if ext != "wav":
+                converted_path = os.path.join(tmpdir, "converted.wav")
+                audio = AudioSegment.from_file(input_path)
+                audio.export(converted_path, format="wav")
+                input_path = converted_path
 
-        # 分割実行
-        segment_files = await run_in_threadpool(lambda: split_audio(input_path, tmpdir))
+            # 分割実行
+            segment_files = await run_in_threadpool(lambda: split_audio(input_path, tmpdir))
 
-        # 分割ごとに文字起こし
-        transcript_results = await run_in_threadpool(lambda: [
-            (transcribe_file(path), offset) for path, offset in segment_files
-        ])
+            # 分割ごとに文字起こし
+            transcript_results = await run_in_threadpool(lambda: [
+                (transcribe_file(path), offset) for path, offset in segment_files
+            ])
 
-        # 結合
-        merged_result = await run_in_threadpool(lambda: merge_segments(transcript_results))
+            # 結合
+            merged_result = await run_in_threadpool(lambda: merge_segments(transcript_results))
 
-        # 要約
-        summary = await run_in_threadpool(lambda: call_summary(merged_result["text"]))
+            # 要約
+            summary = await run_in_threadpool(lambda: call_summary(merged_result["text"]))
 
-        return {
-            "transcription": merged_result["text"],
-            "summary": summary
-        }
+            return {
+                "transcription": merged_result["text"],
+                "summary": summary
+            }
+    except Exception as e:
+    # 例外の詳細なトレースバックをログまたはレスポンスに含める
+        tb = traceback.format_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e), "trace": tb}
+        )

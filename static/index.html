@@ -90,7 +90,10 @@ startBtn.onclick = async () => {
                     method: "POST",
                     body: formData,
                 });
-                if (!response.ok) throw new Error("サーバーエラー");
+                if (!response.ok) {
+                  const errorText = await response.text();
+                  throw new Error(`サーバーエラー:\n${errorText}`);
+                }
                 const data = await response.json();
 
                 status.textContent = "✅ 処理完了";
@@ -99,7 +102,7 @@ startBtn.onclick = async () => {
                     `<h3>✨ 要約</h3><p>${data.summary}</p>`;
             } catch (error) {
                 status.textContent = "❌ エラーが発生しました";
-                resultDiv.textContent = error.message;
+                resultDiv.innerHTML = `<pre>${error.message}</pre>`;
             }
 
             startBtn.disabled = false;
